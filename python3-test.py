@@ -37,7 +37,6 @@ def wall_type(ball_next_x, ball_next_y):
   for i in range(start_x, stop_x):
     # Intersection of line segment ball->ball_next and vertical wall i
     intersect_y = ball_y + (((i+1)*16-ball_x)*(ball_next_y-ball_y))//(ball_next_x-ball_x)
-    # print('ball: ({},{}), next_ball: ({},{}), i: {}, intersect_y: {}'.format(ball_x, ball_y, ball_next_x, ball_next_y, i, intersect_y))
     if walls_v[intersect_y//16][i]:
       is_v_wall = True
       break
@@ -46,17 +45,9 @@ def wall_type(ball_next_x, ball_next_y):
   for i in range(start_y, stop_y):
     # Intersection of line segment ball->ball_next and horizontal wall i
     intersect_x = ball_x + (((i+1)*16-ball_y)*(ball_next_x-ball_x))//(ball_next_y-ball_y)
-    # print('ball: ({},{}), next_ball: ({},{}), i: {}, intersect_x: {}'.format(ball_x, ball_y, ball_next_x, ball_next_y, i, intersect_x))
     if walls_h[intersect_x//16][i]:
       is_h_wall = True
       break
-      
-  # is_v_wall = any(walls_v[square_y][i] for i in range(square_x, square_next_x, dir_x))
-  # is_h_wall = any(walls_h[square_x][i] for i in range(square_y, square_next_y, dir_y))
-  # This is buggy if there is diagonal movement
-  # Instead when checking for vertical walls the correct y-level should be found using intersection of pos-change vector
-  #  and each vertical wall. Should be able to do that math with integer division
-
 
   return (is_v_wall, is_h_wall)
 

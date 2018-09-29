@@ -1,19 +1,14 @@
 # Maze for micropython (on quokka)
-# Adapted from animation.py
+# By Stephen Davies
 
 from maze import MazeTree, Coordinate, get_neighbouring_coordinates
 import quokka
 import framebuf
 import pyb
 
-# Currently detects collision based on pixels
-# Could instead track current square and only allow movement to adjacent square if there is no wall
-# Also would be convenient for determing if you've won
-
-
 ball_x = 6.0
 ball_y = 6.0
-#g = 10 # In pixels/s^2
+
 v_x, v_y = 0.0,0.0
 # For physics collisions and
 # current_square = Coordinate(0, 0)
@@ -25,10 +20,6 @@ physics_tick = False
 import micropython
 micropython.alloc_emergency_exception_buf(100)
 
-###########################################################
-### See new physics function wall_type in python3-test.py
-###########################################################
-
 
 # Cannot allocate memory inside callback
 def render(t):
@@ -39,29 +30,25 @@ def physics(t):
   global physics_tick
   physics_tick = True
 
-render_timer = pyb.Timer(2, freq=60, callback=render)
-physics_timer = pyb.Timer(3, freq=120, callback=physics)
+rt = pyb.Timer(2, freq=60, callback=render)
+pt = pyb.Timer(3, freq=120, callback=physics)
 
-def render_maze(m, fb):
-  # Draw whole grid then remove walls that don't exist
-  for x in range(8):
-    fb.fill_rect(x*16, 0, 1, 64, 1)
-    fb.fill_rect(x*16+15, 0, 1, 64, 1)
-
-  for y in range(4):
-    fb.fill_rect(0, y*16, 128, 1, 1)
-    fb.fill_rect(0, y*16+15, 128, 1, 1)
-
+def make_wall_map(m):
+  'Produce a boolean map of vertical and horizontal walls'
+  # walls is a tuple of (vertical_wall_map, horizontal_wall_map)
+  # vertical_wall_map is a list of rows of walls, horizontal_wall_map is a list of columns of walls)
+  walls_v = [[True]*(m.width-1) for _ in range(m.height)]
+  walls_h = [[True]*(m.height-1) for _ in range(m.width)]
   def remove_wall(coord1, coord2):
-    'Remove wall between neighbouring squares at coord1 and coord2'
+    'Remove a wall between adjacent squares'
     coord = Coordinate(min(coord1.x, coord2.x), min(coord1.y, coord2.y))
     if coord1.x > coord.x or coord2.x > coord.x:
-      fb.fill_rect(coord.x*16+15, coord.y*16+1, 2, 14, 0)
+      walls_v[coord.y][coord.x] = False
     elif coord1.y > coord.y or coord2.y > coord.y:
-      fb.fill_rect(coord.x*16+1, coord.y*16+15, 14, 2, 0)
+      walls_h[coord.x][coord.y] = False
     else:
       print('Error: No wall removed for pair of coords ({0.x}, {0.y}) & ({1.x}, {1.y})'.format(coord1, coord2))
-
+  
   def remove_walls(node):
     'Remove walls between node and its children'
     for child in node.children:
@@ -69,41 +56,79 @@ def render_maze(m, fb):
       remove_walls(child)
 
   remove_walls(m.tree)
+  return (walls_v, walls_h)
 
-# wall_dict = {}
-# def generate_wall_dict(m):
-#   def remove_wall(coord1, coord2):
-#     wall_dict[{coord1, coord2}] = False
-#   def remove_walls(node):
-#     'Remove walls between node and its children'
-#     for child in node.children:
-#       remove_wall(node.coord, child.coord)
-#       remove_walls(child)
+def render_maze(walls, fb):
+  'Render maze onto framebuffer'
+  # Draw border
+  fb.fill_rect(0, 0, 1, 64, 1)
+  fb.fill_rect(127, 0, 1, 64, 1)
+  fb.fill_rect(1, 0, 126, 1, 1)
+  fb.fill_rect(1, 63, 126, 1, 1)
 
-#   # Generate walls between all squares in -1 to 4
-#   for x in range(-1, 8):
-#     for y in range(-1, 4):
-#       wall_dict[{Coordinate(x, y), Coordinate(x+1, y)}] = True
-#       wall_dict[{Coordinate(x, y), Coordinate(x, y+1)}] = True
+  # Draw inner walls
+  for y, row in enumerate(walls[0]):
+    for x, is_wall in enumerate(row, 0):
+      if is_wall:
+        fb.fill_rect(x*16+15, y*16, 2, 16, 1)
+  for x, col in enumerate(walls[1]):
+    for y, is_wall in enumerate(col, 0):
+      if is_wall:
+        fb.fill_rect(x*16, y*16+15, 16, 2, 1)  
 
-#   remove_walls(m.tree)
 
 # Make a maze and draw it to a framebuffer
 my_maze = MazeTree(8, 4)
+wall_map = make_wall_map(my_maze)
 maze_framebuffer = framebuf.FrameBuffer(bytearray(quokka.display.pages*quokka.display.width), quokka.display.width, quokka.display.height, framebuf.MONO_VLSB)
-render_maze(my_maze, maze_framebuffer)
-# generate_wall_dict(my_maze)
+render_maze(wall_map, maze_framebuffer)
 
 def render_method():
   quokka.display.fill(0)
   quokka.display.blit(maze_framebuffer, 0, 0)
   quokka.display.text('S', my_maze.start_square.x*16+3, my_maze.start_square.y*16+3, 1)
   quokka.display.text('E', my_maze.end_square.x*16+3, my_maze.end_square.y*16+3, 1)
+  
   # Draw ball
-  x, y = round(ball_x), round(ball_y)
+  x, y = int(ball_x), int(ball_y)
   quokka.display.fill_rect(x-1,y-1, 3, 3,1)
 
   quokka.display.show()
+
+def wall_type(walls, ball_nx_x, ball_nx_y):
+  'Returns a tuple (isVerticalWall: Boolean, isHorizontalWall: Boolean)'
+  walls_v, walls_h = walls
+
+  # Calculate which square the ball is and will be in
+  sq_x = int(ball_x//16)
+  sq_y = int(ball_y//16)
+  sq_nx_x = int(ball_nx_x//16)
+  sq_nx_y = int(ball_nx_y//16)
+
+  if sq_x == sq_nx_x and sq_y == sq_nx_y:
+    return (False, False)
+
+  # Iteration direction
+  start_x, stop_x = sorted([sq_x, sq_nx_x])
+  start_y, stop_y = sorted([sq_y, sq_nx_y])
+  # dir_y = 1 if square_nx_y > square_y else -1
+  is_v_wall = False
+  for i in range(start_x, stop_x):
+    # Intersection of line segment ball->ball_nx and vertical wall i
+    intersect_y = int(ball_y + (((i+1)*16-ball_x)*(ball_nx_y-ball_y))/(ball_nx_x-ball_x))
+    if walls_v[intersect_y//16][i]:
+      is_v_wall = True
+      break
+
+  is_h_wall = False
+  for i in range(start_y, stop_y):
+    # Intersection of line segment ball->ball_nx and horizontal wall i
+    intersect_x = int(ball_x + (((i+1)*16-ball_y)*(ball_nx_x-ball_x))/(ball_nx_y-ball_y))
+    if walls_h[intersect_x//16][i]:
+      is_h_wall = True
+      break
+
+  return (is_v_wall, is_h_wall)
 
 def physics_method():
   global t_old
@@ -111,23 +136,6 @@ def physics_method():
   global v_y
   global ball_x
   global ball_y
-  # global current_square
-
-  # Make interval from last position and new position
-  # Calculate the x-position on horizontals and y-position on verticals within that interval
-  # Sort by closest
-  # Check collisions
-  # Then what?
-  # What if I need another collision after the first?
-  # Also, motion isn't linear
-
-  # New idea:
-  # Do simple integration
-  # If vector of movement passes through a wall reverse velocity in x or y direction but don't update position
-  # This may cause some odd positioning after bouncing off walls, but should mean that the ball will 
-  #  never pass through a wall
-
-  # Use simple Euler numerical integration
 
   t_new = pyb.millis()
   t_delta = (t_new - t_old)/1000.0
@@ -143,62 +151,34 @@ def physics_method():
 
   # y
   v_y = v_y + a_y*t_delta
-  ball_next_y = ball_y + v_y*t_delta
-
-  # if ball_y < 0:
-  #   ball_y = -ball_y
-  #   v_y = -0.8*v_y
-  # elif ball_y > 63:
-  #   ball_y = 126 - ball_y
-  #   v_y = -0.8*v_y
+  ball_nx_y = ball_y + v_y*t_delta
 
   # x
   v_x = v_x + a_x*t_delta
-  ball_next_x = ball_x + v_x*t_delta
+  ball_nx_x = ball_x + v_x*t_delta
 
-  if no_walls(ball_next_x, ball_next_y):
-    ball_x = ball_next_x
-    ball_y = ball_next_y
-
-
-  # if ball_x < 0:
-  #   ball_x = -ball_x
-  #   v_x = -0.8*v_x
-  # elif ball_x > 127:
-  #   ball_x = 254 - ball_x
-  #   v_x = -0.8*v_x
-
-  if maze_framebuffer.pixel(int(ball_x), int(ball_y)) == 1:
-    print('collision')
-    if int(ball_x) % 16 == 0 and maze_framebuffer.pixel(int(ball_x), int(ball_y)-1) == 1:
-      print('x left collision')
-      v_x = -0.8*v_x
-      ball_x += 1
-    elif int(ball_x) % 16 == 15 and maze_framebuffer.pixel(int(ball_x), int(ball_y)+1) == 1:
-      print('x right collision')
-      v_x = -0.8*v_x
-      ball_x -= 1
-    if int(ball_y) % 16 == 0 and maze_framebuffer.pixel(int(ball_x)-1, int(ball_y)) == 1:
-      print('y up collision')
-      v_y = -0.8*v_y
-      ball_y += 1
-    elif int(ball_y) % 16 == 15 and maze_framebuffer.pixel(int(ball_x)+1, int(ball_y)) == 1:
-      print('y down collision')
-      v_y = -0.8*v_y
-      ball_y -= 1
-
-  # new_square = Coordinate(int(x/16.0), int(y/16.0))
-  # if new_square != current_square:
-  #   if new_square in get_neighbouring_coordinates(current_square):
-  #     if not wall_dict[{current_square, new_square}]:
-  #       # No wall
-  #       current_square = new_square
-  #     else:
-  #       # Wall
-
-
-
-
+  # Check crossing outer border. 
+  # Must be done before collision detection because the algorithm crashes for out of bounds coordinates
+  skip_collision = False
+  if ball_nx_x < 0 or ball_nx_x > 128:
+    v_x = -0.8*v_x
+    skip_collision = True
+  if ball_nx_y < 0 or ball_nx_y > 64:
+    v_y = -0.8*v_y
+    skip_collision = True
+  if skip_collision:
+    return
+  
+  # Determine the types of walls that the ball will pass through to get to ball_nx and deflect off them
+  v_wall, h_wall = wall_type(wall_map, ball_nx_x, ball_nx_y)
+  if v_wall:
+    v_x = -0.8*v_x
+  if h_wall:
+    v_y = -0.8*v_y
+  if not(v_wall) and not(h_wall):
+    # No collision. Advance ball
+    ball_x = ball_nx_x
+    ball_y = ball_nx_y
 
 
 t_old = pyb.millis()
@@ -210,8 +190,6 @@ while True:
   if physics_tick:
     physics_method()
     physics_tick = False
-
-
 
   quokka.sleep(1)
 
