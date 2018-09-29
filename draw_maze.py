@@ -25,6 +25,11 @@ physics_tick = False
 import micropython
 micropython.alloc_emergency_exception_buf(100)
 
+###########################################################
+### See new physics function wall_type in python3-test.py
+###########################################################
+
+
 # Cannot allocate memory inside callback
 def render(t):
   global render_tick
@@ -116,6 +121,12 @@ def physics_method():
   # What if I need another collision after the first?
   # Also, motion isn't linear
 
+  # New idea:
+  # Do simple integration
+  # If vector of movement passes through a wall reverse velocity in x or y direction but don't update position
+  # This may cause some odd positioning after bouncing off walls, but should mean that the ball will 
+  #  never pass through a wall
+
   # Use simple Euler numerical integration
 
   t_new = pyb.millis()
@@ -128,10 +139,11 @@ def physics_method():
     a_x = -200.0*accel_vec[0]
   except OSError as e:
     print('Accelerometer error: {}'.format(e))
+    return
 
   # y
   v_y = v_y + a_y*t_delta
-  ball_y = ball_y + v_y*t_delta
+  ball_next_y = ball_y + v_y*t_delta
 
   # if ball_y < 0:
   #   ball_y = -ball_y
@@ -142,7 +154,12 @@ def physics_method():
 
   # x
   v_x = v_x + a_x*t_delta
-  ball_x = ball_x + v_x*t_delta
+  ball_next_x = ball_x + v_x*t_delta
+
+  if no_walls(ball_next_x, ball_next_y):
+    ball_x = ball_next_x
+    ball_y = ball_next_y
+
 
   # if ball_x < 0:
   #   ball_x = -ball_x
@@ -196,7 +213,7 @@ while True:
 
 
 
-  quokka.sleep(2)
+  quokka.sleep(1)
 
 
 
