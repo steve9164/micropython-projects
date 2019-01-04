@@ -4,7 +4,7 @@ import framebuf
 import zlib
 
 def load_image(filename, compressed=None):
-  if compressed is None
+  if compressed is None:
     compressed = filename.endswith('.qimz')
   # Open the image
   with open(filename, 'rb') as f:
