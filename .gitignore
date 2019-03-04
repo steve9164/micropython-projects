@@ -1,0 +1,8 @@
+__pycache__/
+.vscode/
+
+# AWS IoT certificates
+connect_device_package.zip
+*.private.key
+*.public.key
+*.cert.pem
