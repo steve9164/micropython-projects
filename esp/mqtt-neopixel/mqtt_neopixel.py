@@ -18,7 +18,12 @@ disp_reset.value(1)
 i2c = machine.I2C(scl=machine.Pin(15), sda=machine.Pin(4)) # Don't set Pins as Pin.OUT
 display = ssd1306.SSD1306_I2C(128, 64, i2c)
 
-
+import quokka_radio
+hspi = machine.SPI(1, 1000000, sck=machine.Pin(14), mosi=machine.Pin(13), miso=machine.Pin(12))
+nrf_slave_select = machine.Pin(27, machine.Pin.OUT)
+nrf_slave_select.value(1)
+r = quokka_radio.QuokkaRadio(nrf_slave_select, hspi)
+r.config(channel=15)
 
 _CLIENT_ID = ubinascii.hexlify(machine.unique_id())
 _THING_NAME = 'ESP8266-Quokka-LED'
@@ -86,6 +91,9 @@ def subscribe_to_delta(client, set_led):
             if 'text' in delta:
                 wrap_text(delta['text'])
                 update_report['text'] = delta['text']
+            if 'neopixels' in delta:
+                update_quokka_neopixels(delta['neopixels'])
+                update_report['neopixels'] = delta['neopixels']
             report_updated(client, update_report)
 
     client.set_callback(sub_cb)
@@ -117,6 +125,9 @@ def update_led(client, level):
     msg = json.dumps(update_led_dict)
     print('Publishing: {}'.format(msg))
     client.publish(_UPDATE_TOPIC, msg)
+
+def update_quokka_neopixels(neopixel_bytes):
+    r.send(neopixel_bytes)
 
 def cs():
     client = connect()

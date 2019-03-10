@@ -1,5 +1,6 @@
 from quokka import *
 import radio
+import ubinascii
 
 np = neopixel.NeoPixel()
 
@@ -7,9 +8,10 @@ radio.config(channel=15)
 radio.on()
 
 while True:
-  msg_bytes = radio.receive_bytes()
-  if msg_bytes:
-#    msg_bytes = msg_bytes[2:]
+  msg = radio.receive()
+  if msg:
+    print(msg)
+    msg_bytes = ubinascii.a2b_base64(msg)
     print(msg_bytes)
     for i in range(0, len(msg_bytes)-3, 3):
       pixel = [int(c) for c in msg_bytes[i:i+3]]

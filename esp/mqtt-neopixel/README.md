@@ -1,6 +1,6 @@
 # MQTT Neopixel
 
-Controls neopixels via AWS IoT over MQTT. AWS IoT private keys stored separately
+Controls neopixels via AWS IoT over MQTT. AWS IoT private keys stored separately. Works on ESP32 (ESP8266 crashes while trying to create an SSL connection)
 
 ## Private keys
 
